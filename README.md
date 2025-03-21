@@ -7,7 +7,8 @@ A simple PowerShell-based utility that imports a list of usernames from an Excel
 - [Quick Usage](#-quick-usage)
 - [Supported Operating Systems](#-supported-operating-systems)
 - [Prerequisites](#%EF%B8%8F-prerequisites)
-- [Future Development Ideas](#-future-development)
+- [Noteworthy Code Snippets](#-noteworthy-code-snippets)
+- [Future Development](#-future-development)
 - [Acknowledgements](#-acknowledgements)
 - [License](#-license)
 - [Author](#-author)
@@ -20,6 +21,8 @@ It came about after a colleague needed a way to periodically review the status o
 I originally began writing a basic PowerShell script for the task... but then thought, *why not have some fun with it?* So I turned to **ChatGPT** to see how far I could take it — and this tool is the result.
 
 I hadn’t really used any AI platforms before this, so this was a bit of an experiment — both to build something useful and to see what was possible with a bit of curiosity (and some help from an AI). It turned out to be a fun and surprisingly productive experience.
+
+[🔝 Back to top](#ad-user-status)
 
 ## 📋 Features
 - Import users from Excel file (.xlsx)
@@ -74,13 +77,73 @@ The application has been tested and confirmed working on:
 
 [🔝 Back to top](#ad-user-status)
 
+## 💻 Noteworthy Code Snippets
+🔐 **LDAPS First, LDAP Fallback**
+The script first attempts to connect to Active Directory using LDAPS (port 636) and perform a secure query however If LDAPS is unavailable (due to firewall, network issues or misconfiged domain settings), it gracefully fails back to standard LDAP (port 389) which is displayed in the bottom left corner of the application window.
+```
+function Test-LDAPSConnection {
+    param (
+        [string]$adServer
+    )
+    try {
+        # Define the LDAP server with LDAPS port (636)
+        $ldapIdentifier = "$adServer:636"
+        $ldapConnection = New-Object System.DirectoryServices.Protocols.LdapConnection($ldapIdentifier)
+        
+        # Use SSL
+        $ldapConnection.SessionOptions.SecureSocketLayer = $true
+        $ldapConnection.SessionOptions.VerifyServerCertificate = {
+            param ($conn, $cert)
+            return $true  # You can add stricter certificate validation here if needed
+        }
+
+        # Attempt a bind using the current credentials
+        $ldapConnection.AuthType = [System.DirectoryServices.Protocols.AuthType]::Negotiate
+        $ldapConnection.Bind()  # Throws an exception if the connection fails
+
+        # Perform a basic LDAP search to confirm server responds to queries
+        $searchRequest = New-Object System.DirectoryServices.Protocols.SearchRequest(
+            "",  # Base DN (empty means the rootDSE)
+            "(objectClass=*)",  # Simple filter to return all objects
+            [System.DirectoryServices.Protocols.SearchScope]::Base,  # Only the rootDSE
+            @("defaultNamingContext")  # Attributes to return
+        )
+
+        $searchResponse = $ldapConnection.SendRequest($searchRequest)
+
+        # If the response has entries, LDAPS is working fully
+        if ($searchResponse.Entries.Count -gt 0) {
+            $ldapConnection.Dispose()
+            return $true
+        } else {
+            $ldapConnection.Dispose()
+            return $false
+        }
+    }
+    catch {
+        # LDAPS failed (either connection error, bind failure, or query failure)
+        return $false
+    }
+}
+```
+<div align="center">
+  <img src="images/LDAP_example.png" alt="LDAP Example"/>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="images/LDAPS_example.png" alt="LDAPS Example"/>
+</div>
+
+This dual-path approach prioritizes secure communication by attempting LDAPS first, while maintaining compatibility by gracefully falling back to standard LDAP if necessary.
+
+[🔝 Back to top](#ad-user-status)
+
 ## 🧠 Future Development
 Here are some enhancement ideas I’m considering for future versions of the tool:
 - Allow user selection of which columns to import and process from the provided .xlsx file.
-- Improve the FAQ/help window for better clarity and usability
-- Auto-generate a placeholder Internal ID if one is not provided
-- Display summary statistics (e.g., number of active, disabled, external accounts)
-- Auto-check for newer version or release tag on GitHub
+- Improve the FAQ/help window for better clarity and usability.
+- Introduce a retry button for when a Domain Controller cannot be found.
+- Auto-generate a placeholder Internal ID if one is not provided.
+- Display summary statistics (e.g., number of active, disabled, external accounts).
+- Auto-check for newer version or release tag on GitHub.
 
 [🔝 Back to top](#ad-user-status)
 
